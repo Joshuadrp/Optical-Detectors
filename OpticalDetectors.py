@@ -55,6 +55,8 @@ def show_combined_images(img1, img2):
 def find_sources(image, sigma=1, min_area=3, max_area=200, edge=50):
     """Detect stars in the merged FITS image using a simple threshold method."""
 
+    print("Detecting...")
+
     #Estimate background with sigma clipping
     flat = image.flatten()
     for _ in range(3):  # repeat to remove outliers
@@ -103,7 +105,7 @@ def cross_match(src1, src2, radius=2.0):
             matches.append({'x': (s1['x'] + s2['x']) / 2,
                             'y': (s1['y'] + s2['y']) / 2})
 
-    print(f"  Matched {len(matches)} sources")
+    print(f"Matched {len(matches)} stars")
     return matches
 
 
@@ -143,8 +145,6 @@ def save_catalog(sources, filename, cols=None):
                         f"{s['mag_F555W']:.3f}",
                         f"{s['color']:.3f}"]
             f.write("\t".join(row) + "\n")
-    print(f"[OK] Catalog saved: {filename}")
-
 
 # ============================================================
 # TASK 3: APERTURE PHOTOMETRY AND CATALOG CREATION
@@ -174,7 +174,6 @@ def measure_mags(sources, img1, img2, ref_mag=15.0):
     # Calibrate using brightest star from filters
     zp1 = ref_mag + 2.5 * np.log10(max(f1))
     zp2 = ref_mag + 2.5 * np.log10(max(f2))
-    print(f"Zero-points: F336W={zp1:.2f}, F555W={zp2:.2f}")
 
     catalog = []
     for s, flux1, flux2 in zip(sources, f1, f2):
@@ -242,8 +241,8 @@ if __name__ == "__main__":
     catalog = measure_mags(matched, f336w, f555w)
     save_catalog(catalog, "photometry_catalog.txt",
                  cols=["ID", "x", "y", "ap_radius", "mag_F336W", "mag_F555W", "color"])
+    print("OK")
 
     print("\n --- HERTZSPRUNG–RUSSELL DIAGRAM --- ")
     plot_hr(catalog)
-
-    print("\n Complete ✅")
+    print("Complete ✅")
