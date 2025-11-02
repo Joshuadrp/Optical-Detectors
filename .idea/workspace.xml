@@ -7,12 +7,6 @@
     <list default="true" id="5056ee58-12ae-414e-b2f0-686f46e72d5f" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/OpticalDetectors.py" beforeDir="false" afterPath="$PROJECT_DIR$/OpticalDetectors.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/combined_F336W.fits" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/combined_F555W.fits" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/hr_catalog.txt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/hr_diagram.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/photometry_catalog.txt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/star_catalog.txt" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

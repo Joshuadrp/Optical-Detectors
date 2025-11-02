@@ -1,464 +1,254 @@
 import os
-from astropy.io import fits
 import numpy as np
-import matplotlib.pyplot as plt
+from astropy.io import fits
 from scipy import ndimage
+import matplotlib.pyplot as plt
 
-"""
-TASK 1
-COSMIC RAY REMOVAL
-"""
+# ============================================================
+# TASK 1: COSMIC RAY REMOVAL
+# ============================================================
 
-def cosmic_ray_removal(directory, output_file=None):
-    """
-    This function combines our fits images into a single image,
-    which as seen in class can remove most of the cosmic rays.
-    We will have two images, one for each filter.
-    As a reference for future me, F336 is UV range (UV 10-400nm)
-    F555 is visible light (Visible light 400-700nm)
-    """
-
-    fits_files = [
-        os.path.join(directory, f)
-        for f in os.listdir(directory)
-        if f.lower().endswith('.fits')
-    ]
+def combine_fits_images(directory, output_file=None):
+    """Combine FITS images using median to remove cosmic rays."""
+    fits_files = [os.path.join(directory, f) for f in os.listdir(directory)
+                  if f.lower().endswith('.fits')]
 
     image_data = []
     for file in fits_files:
         with fits.open(file) as hdul:
             for hdu in hdul:
                 if hdu.data is not None:
-                    data = hdu.data.astype(np.float32)
-                    image_data.append(data)
+                    image_data.append(hdu.data.astype(np.float32))
                     break
-            else:
-                raise ValueError(f"No image data found in {file}")
 
-    combined_image = np.median(image_data, axis=0)
+    combined = np.median(image_data, axis=0)
 
     if output_file is None:
         folder_name = os.path.basename(os.path.normpath(directory))
         output_file = f"combined_{folder_name}.fits"
 
-    # Creates the combined image.
-    fits.writeto(output_file, combined_image, overwrite=True)
-    print(f"Combined image saved as {output_file}.")
-
-    return combined_image
-
-f336w = cosmic_ray_removal("data/F336W")
-f555w = cosmic_ray_removal("data/F555W")
-
-"""
-Visualisation TASK 1
-"""
-fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-
-axes[0].imshow(f336w, cmap='gray', origin='lower', vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
-axes[1].imshow(f555w, cmap='gray', origin='lower', vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
-axes[0].set_title("Combined F336W")
-axes[1].set_title("Combined F555W")
-
-for ax in axes:
-    ax.set_xticks([])
-    ax.set_yticks([])
-
-plt.tight_layout()
-plt.show()
-
-"""
-TASK 2
-STAR FINDING and STAR CATALOGUE
-"""
+    fits.writeto(output_file, combined, overwrite=True)
+    print(f"Combined image saved: {output_file}")
+    return combined
 
 
-def star_finding(image, threshold_sigma=0.8, edge_buffer=50):
-    """Detect sources above threshold, excluding edges."""
-    background = np.median(image)
-    background_std = np.std(image)
-    background_subtracted = image - background
+def show_combined_images(img1, img2):
+    """Plot two combined images side by side."""
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    imgs = [img1, img2]
+    titles = ["F336W (UV)", "F555W (Visible)"]
 
-    threshold = threshold_sigma * background_std
-    source_mask = background_subtracted > threshold
+    for ax, img, title in zip(axes, imgs, titles):
+        vmin, vmax = np.percentile(img, [1, 99])
+        ax.imshow(img, cmap='gray', origin='lower', vmin=vmin, vmax=vmax)
+        ax.set_title(title)
+        ax.axis('off')
 
-    labeled, num = ndimage.label(source_mask)
-    print(f"  Initial detections: {num}")
+    plt.tight_layout()
+    plt.savefig("combined_images.png", dpi=150)
+    plt.show()
+
+
+# ============================================================
+# TASK 2: DETECT STARS, CROSS MATCHING AND CATALOGUE CREATION
+# ============================================================
+def find_sources(image, sigma=1, min_area=3, max_area=200, edge=50):
+    """Detect stars in the merged FITS image using a simple threshold method."""
+
+    #Estimate background with sigma clipping
+    flat = image.flatten()
+    for _ in range(3):  # repeat to remove outliers
+        med = np.median(flat)
+        std = np.std(flat)
+        flat = flat[np.abs(flat - med) < 3 * std]
+
+    bkg = np.median(flat)
+    bkg_std = np.std(flat)
+    thresh = sigma * bkg_std
+
+    #Create mask for bright pixels
+    mask = (image - bkg) > thresh
+    labeled, n = ndimage.label(mask)
+    print(f"  Found {n} raw detections")
 
     sources = []
-    for i in range(1, num + 1):
-        pixels = labeled == i
-        y_coords, x_coords = np.where(pixels)
+    for i in range(1, n + 1):
+        pix = (labeled == i)
+        area = np.sum(pix)
+        if not (min_area <= area <= max_area):
+            continue  # skip too small or too large
 
-        # Weighted centroid (brighter pixels pull center)
-        brightness = background_subtracted[pixels]
-        x_center = np.sum(x_coords * brightness) / np.sum(brightness)
-        y_center = np.sum(y_coords * brightness) / np.sum(brightness)
+        y, x = np.where(pix)
+        xc, yc = np.mean(x), np.mean(y)
 
-        if x_center > edge_buffer and y_center > edge_buffer:
-            sources.append({'x': x_center, 'y': y_center})
+        # skip sources near edges
+        if xc > edge and yc > edge:
+            sources.append({'x': xc, 'y': yc, 'area': area})
 
-    print(f"  After edge filtering: {len(sources)}")
+    print(f"  {len(sources)} detections kept after filtering")
     return sources
 
-print("DETECTING SOURCES IN F336W")
-sources_f336w = star_finding(f336w)
 
-print("DETECTING SOURCES IN F555W")
-sources_f555w = star_finding(f555w)
-
-"""
-Visualizing stars found in both images
-"""
-fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-
-# F336W with detections
-axes[0].imshow(f336w, cmap='gray', origin='lower',
-               vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
-for source in sources_f336w:
-    axes[0].plot(source['x'], source['y'], 'r+', markersize=5, markeredgewidth=0.5)
-axes[0].set_title(f"F336W - {len(sources_f336w)} sources detected")
-axes[0].set_xlabel("X pixel")
-axes[0].set_ylabel("Y pixel")
-
-# F555W with detections
-axes[1].imshow(f555w, cmap='gray', origin='lower',
-               vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
-for source in sources_f555w:
-    axes[1].plot(source['x'], source['y'], 'r+', markersize=5, markeredgewidth=0.5)
-axes[1].set_title(f"F555W - {len(sources_f555w)} sources detected")
-axes[1].set_xlabel("X pixel")
-axes[1].set_ylabel("Y pixel")
-
-plt.tight_layout()
-plt.show()
-
-def cross_match_sources(src1,src2, match_radius=2.5):
-    """
-    Cross-match sources between F336W and F555W.
-
-    -src1: list of sources from fist filter
-    -src2: list of sources from second filter
-    -match_radius: radius of cross-match
-    """
-    matched_stars = []
+def cross_match(src1, src2, radius=2.0):
+    """Cross-match sources between two filters (e.g. UV and visible)."""
+    matches = []
     for s1 in src1:
-        # Find the closest source in filter 2
-        min_distance = float('inf')
-        closest_match = None
-
-        for s2 in src2:
-            # Calculate distance between sources
-            distance = np.sqrt((s1['x'] - s2['x']) ** 2 + (s1['y'] - s2['y']) ** 2)
-
-            if distance < min_distance:
-                min_distance = distance
-                closest_match = s2
-
-        # If closest match is within radius, is a match.
-        if closest_match is not None and min_distance <= match_radius:
-            matched_stars.append({
-                'filter1': s1,
-                'filter2': closest_match,
-                'distance': min_distance
-            })
-
-    print(f"  Matched sources: {len(matched_stars)}")
-    return matched_stars
-
-# Matched stars from F336W and F555W
-matched = cross_match_sources(sources_f336w, sources_f555w, match_radius=3.0)
-
-def star_catalog(matched_sources, output_file='star_catalog.txt'):
-    """
-    Create a final catalog from matched sources.
-
-    Parameters:
-    - matched_sources: list of matched stars
-    - output_file: filename to save catalog
-    """
-    catalog = []
-
-    for i, match in enumerate(matched_sources):
-        # Average the coordinates from both filters
-        x_avg = (match['filter1']['x'] + match['filter2']['x']) / 2.0
-        y_avg = (match['filter1']['y'] + match['filter2']['y']) / 2.0
-
-        catalog.append({
-            'Object ID': i + 1,
-            'x-center': x_avg,
-            'y-center': y_avg
-        })
-
-    # Save to file
-    with open(output_file, 'w') as f:
-        f.write("Object ID\tx-center\ty-center\n")
-
-        # Write each source
-        for s in catalog:
-            f.write(f"{s['Object ID']}\t{s['x-center']:.2f}\t{s['y-center']:.2f}\n")
-
-    return catalog
-
-# Create the final catalog
-final_catalog = star_catalog(matched)
-
-"""
-Visualization of matched stars between filters.
-"""
-
-fig, axes = plt.subplots(1, 2, figsize=(16, 7))
-
-# F336W with final catalog sources
-axes[0].imshow(f336w, cmap='gray', origin='lower',
-               vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
-for source in final_catalog:
-    axes[0].plot(source['x-center'], source['y-center'], 'r+', markersize=4, markeredgewidth=0.8)
-axes[0].set_title(f"F336W - Final Catalog: {len(final_catalog)} matched sources")
-axes[0].set_xlabel("X pixel")
-axes[0].set_ylabel("Y pixel")
-
-# F555W with final catalog sources
-axes[1].imshow(f555w, cmap='gray', origin='lower',
-               vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
-for source in final_catalog:
-    axes[1].plot(source['x-center'], source['y-center'], 'r+', markersize=4, markeredgewidth=0.8)
-axes[1].set_title(f"F555W - Final Catalog: {len(final_catalog)} matched sources")
-axes[1].set_xlabel("X pixel")
-axes[1].set_ylabel("Y pixel")
-
-plt.tight_layout()
-plt.show()
-
-"""
-TASK 3
-PHOTOMETRY CATALOG
-"""
-
-
-def aperture_photometry(image, x, y, aperture_radius=5, inner_annulus=8, outer_annulus=12):
-    """
-    Perform circular aperture photometry on a source.
-
-    Parameters:
-    - image: 2D array of the image
-    - x, y: center coordinates of the source
-    - aperture_radius: radius of circular aperture for source flux
-    - inner_annulus: inner radius for background annulus
-    - outer_annulus: outer radius for background annulus
-
-    Returns:
-    - flux: background-subtracted flux
-    - background: estimated local background per pixel
-    """
-    height, width = image.shape
-
-    # Create coordinate grids
-    y_grid, x_grid = np.ogrid[:height, :width]
-
-    # Calculate distance from source center
-    distance = np.sqrt((x_grid - x) ** 2 + (y_grid - y) ** 2)
-
-    # Define aperture and annulus masks
-    aperture_mask = distance <= aperture_radius
-    annulus_mask = (distance >= inner_annulus) & (distance <= outer_annulus)
-
-    # Measure background in annulus
-    if np.sum(annulus_mask) > 0:
-        background_pixels = image[annulus_mask]
-        background_per_pixel = np.median(background_pixels)
-    else:
-        background_per_pixel = 0
-
-    # Measure flux in aperture
-    aperture_pixels = image[aperture_mask]
-    total_flux = np.sum(aperture_pixels)
-
-    # Subtract background contribution
-    n_aperture_pixels = np.sum(aperture_mask)
-    background_contribution = background_per_pixel * n_aperture_pixels
-    flux = total_flux - background_contribution
-
-    return flux, background_per_pixel
-
-
-def flux_to_magnitude(flux, zero_point):
-    """
-    Convert flux to magnitude with zero-point calibration.
-    Handles negative/zero flux by returning NaN.
-
-    Parameters:
-    - flux: measured flux
-    - zero_point: calibration constant (typically 25-26 for HST)
-    """
-    if flux <= 0:
-        return np.nan
-    return -2.5 * np.log10(flux) + zero_point
-
-
-def perform_photometry_catalog(catalog, image_f336w, image_f555w, aperture_radius=5, reference_mag=15.0):
-    """
-    Perform photometry on all sources in catalog for both filters.
-
-    Parameters:
-    - catalog: list of sources with x-center, y-center
-    - image_f336w: F336W image array
-    - image_f555w: F555W image array
-    - aperture_radius: radius for aperture photometry
-    - reference_mag: magnitude to assign to the brightest star (default 15.0)
-
-    Returns:
-    - photometry_catalog: catalog with magnitudes added
-    """
-    photometry_catalog = []
-    fluxes_f336w = []
-    fluxes_f555w = []
-
-    # First pass: measure all fluxes
-    for source in catalog:
-        x = source['x-center']
-        y = source['y-center']
-
-        # Perform photometry in both filters
-        flux_f336w, bg_f336w = aperture_photometry(image_f336w, x, y, aperture_radius)
-        flux_f555w, bg_f555w = aperture_photometry(image_f555w, x, y, aperture_radius)
-
-        fluxes_f336w.append(flux_f336w)
-        fluxes_f555w.append(flux_f555w)
-
-    # Find the brightest star (maximum flux) in each filter
-    max_flux_f336w = max(fluxes_f336w)
-    max_flux_f555w = max(fluxes_f555w)
-
-    # Calculate zero-points based on brightest star
-    zero_point_f336w = reference_mag + 2.5 * np.log10(max_flux_f336w)
-    zero_point_f555w = reference_mag + 2.5 * np.log10(max_flux_f555w)
-
-    print(f"Brightest star flux F336W: {max_flux_f336w:.2f} → zero-point: {zero_point_f336w:.2f}")
-    print(f"Brightest star flux F555W: {max_flux_f555w:.2f} → zero-point: {zero_point_f555w:.2f}")
-
-    # Second pass: convert all fluxes to magnitudes
-    for i, source in enumerate(catalog):
-        mag_f336w = flux_to_magnitude(fluxes_f336w[i], zero_point_f336w)
-        mag_f555w = flux_to_magnitude(fluxes_f555w[i], zero_point_f555w)
-
-        photometry_catalog.append({
-            'Object ID': source['Object ID'],
-            'x-center': source['x-center'],
-            'y-center': source['y-center'],
-            'aperture_radius': aperture_radius,
-            'mag_F336W': mag_f336w,
-            'mag_F555W': mag_f555w
-        })
-
-    return photometry_catalog
-
-
-# Perform photometry on final catalog
-print("PERFORMING APERTURE PHOTOMETRY")
-
-# Use background-subtracted images for photometry
-f336w_bgsub = f336w - np.median(f336w)
-f555w_bgsub = f555w - np.median(f555w)
-photometry_catalog = perform_photometry_catalog(final_catalog, f336w_bgsub, f555w_bgsub)
-
-# Save photometry catalog
-with open('photometry_catalog.txt', 'w') as f:
-    f.write("Object_ID\tx-center\ty-center\taperture_radius\tmag_F336W\tmag_F555W\n")
-    for source in photometry_catalog:
-        f.write(f"{source['Object ID']}\t{source['x-center']:.2f}\t{source['y-center']:.2f}\t"
-                f"{source['aperture_radius']:.1f}\t{source['mag_F336W']:.3f}\t{source['mag_F555W']:.3f}\n")
-
-print(f"Photometry catalog saved: photometry_catalog.txt")
-print(f"Total sources with photometry: {len(photometry_catalog)}")
-
-"""
-TASK 4
-Hertzsprung-Russell Diagram
-"""
-
-def calculate_colors(photometry_catalog):
-    """
-    Calculate color (F336W - F555W) for each source.
-    Filter out sources with NaN magnitudes.
-    Parameters:
-    - photometry_catalog: catalog with magnitudes
-
-    Returns:
-    - hr_catalog: catalog with color added, NaN values removed
-    """
-    hr_catalog = []
-
-    for source in photometry_catalog:
-        mag_f336w = source['mag_F336W']
-        mag_f555w = source['mag_F555W']
-
-        # Skip sources with invalid magnitudes
-        if np.isnan(mag_f336w) or np.isnan(mag_f555w):
+        #compute distances from this source to all in the other list
+        dists = [np.hypot(s1['x'] - s2['x'], s1['y'] - s2['y']) for s2 in src2]
+        if not dists:
             continue
 
-        # Calculate color (difference between filters)
-        color = mag_f336w - mag_f555w
+        dmin = min(dists)  # find nearest neighbor distance
+        if dmin <= radius:  # if close enough, count as a match
+            s2 = src2[dists.index(dmin)]
+            # average positions from both images
+            matches.append({'x': (s1['x'] + s2['x']) / 2,
+                            'y': (s1['y'] + s2['y']) / 2})
 
-        hr_catalog.append({
-            'Object ID': source['Object ID'],
-            'x-center': source['x-center'],
-            'y-center': source['y-center'],
-            'aperture_radius': source['aperture_radius'],
-            'mag_F336W': mag_f336w,
-            'mag_F555W': mag_f555w,
-            'color_F336W_F555W': color
-        })
-
-    return hr_catalog
-
-print("CALCULATING COLORS")
-hr_catalog = calculate_colors(photometry_catalog)
-print(f"Sources with valid magnitudes: {len(hr_catalog)} (removed {len(photometry_catalog) - len(hr_catalog)} with NaN)")
-
-with open('hr_catalog.txt', 'w') as f:
-    f.write("Object_ID\tx-center\ty-center\taperture_radius\tmag_F336W\tmag_F555W\tcolor\n")
-    for source in hr_catalog:
-        f.write(f"{source['Object ID']}\t{source['x-center']:.2f}\t{source['y-center']:.2f}\t"
-                f"{source['aperture_radius']:.1f}\t{source['mag_F336W']:.3f}\t{source['mag_F555W']:.3f}\t"
-                f"{source['color_F336W_F555W']:.3f}\n")
+    print(f"  Matched {len(matches)} sources")
+    return matches
 
 
-# Extract colors and magnitudes
-colors = [source['color_F336W_F555W'] for source in hr_catalog]
-magnitudes = [source['mag_F336W'] for source in hr_catalog]
+def show_detections(img1, img2, src1, src2, matched):
+    """Display detections and matched stars."""
+    fig, axes = plt.subplots(1, 3, figsize=(16, 6))
+    data = [
+        (img1, src1, f"F336W detections ({len(src1)})"),
+        (img2, src2, f"F555W detections ({len(src2)})"),
+        (img1, matched, f"Matched stars ({len(matched)})")
+    ]
 
-# Create HR Diagram
-fig, ax = plt.subplots(figsize=(10, 8))
+    for ax, (img, src, title) in zip(axes, data):
+        vmin, vmax = np.percentile(img, [1, 99])
+        ax.imshow(img, cmap='gray', origin='lower', vmin=vmin, vmax=vmax)
+        for s in src:
+            ax.plot(s['x'], s['y'], 'r+', markersize=4)
+        ax.set_title(title)
+        ax.axis('off')
 
-# Scatter plot
-ax.scatter(colors, magnitudes, alpha=0.6, s=20, c='yellow', edgecolors='black', linewidth=0.5)
+    plt.tight_layout()
+    plt.savefig("star_detections.png", dpi=150)
+    plt.show()
 
-# CRITICAL: Invert y-axis (brighter stars at top)
-ax.invert_yaxis()
 
-# Labels and title
-ax.set_xlabel('Color (F336W - F555W) [mag]', fontsize=12)
-ax.set_ylabel('Magnitude F336W [mag]', fontsize=12)
-ax.set_title('Hertzsprung-Russell Diagram', fontsize=14, fontweight='bold')
+def save_catalog(sources, filename, cols=None):
+    """Save source list to a tab-separated text file."""
+    if cols is None:
+        cols = ["ID", "x", "y"]
+    with open(filename, "w") as f:
+        f.write("\t".join(cols) + "\n")
+        for i, s in enumerate(sources, 1):
+            row = [f"{i}", f"{s['x']:.2f}", f"{s['y']:.2f}"]
+            if "mag_F336W" in s:
+                row += [f"{s['ap_radius']:.1f}",
+                        f"{s['mag_F336W']:.3f}",
+                        f"{s['mag_F555W']:.3f}",
+                        f"{s['color']:.3f}"]
+            f.write("\t".join(row) + "\n")
+    print(f"[OK] Catalog saved: {filename}")
 
-# Add grid for readability
-ax.grid(True, alpha=0.3, linestyle='--')
 
-# Add text annotations
-ax.text(0.05, 0.95, f'N = {len(hr_catalog)} stars',
-        transform=ax.transAxes, fontsize=10, verticalalignment='top',
-        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+# ============================================================
+# TASK 3: APERTURE PHOTOMETRY AND CATALOG CREATION
+# ============================================================
 
-# Add arrow annotations for hot/cool
-ax.text(0.05, 0.05, 'Hot (Blue)', transform=ax.transAxes, fontsize=9,
-        color='blue', style='italic')
-ax.text(0.95, 0.05, 'Cool (Red)', transform=ax.transAxes, fontsize=9,
-        color='red', style='italic', ha='right')
+def aperture_flux(image, x, y, r=5, r_in=8, r_out=12):
+    """Return aperture flux after local background subtraction."""
+    h, w = image.shape
+    yy, xx = np.ogrid[:h, :w]
+    dist = np.sqrt((xx - x) ** 2 + (yy - y) ** 2)
 
-plt.tight_layout()
-plt.savefig('hr_diagram.png', dpi=150)
-plt.show()
+    # Define circular regions
+    ap_mask = dist <= r
+    ann_mask = (dist >= r_in) & (dist <= r_out)
 
-print(f"\n{'='*50}")
-print("HR DIAGRAM CREATED")
+    # Measure background in annulus, subtract from aperture
+    bkg = np.median(image[ann_mask]) if np.any(ann_mask) else 0
+    flux = np.sum(image[ap_mask]) - bkg * np.sum(ap_mask)
+    return flux
+
+
+def measure_mags(sources, img1, img2, ref_mag=15.0):
+    """Compute magnitudes for matched stars."""
+    f1 = [aperture_flux(img1, s['x'], s['y']) for s in sources]
+    f2 = [aperture_flux(img2, s['x'], s['y']) for s in sources]
+
+    # Calibrate using brightest star
+    zp1 = ref_mag + 2.5 * np.log10(max(f1))
+    zp2 = ref_mag + 2.5 * np.log10(max(f2))
+    print(f"Zero-points: F336W={zp1:.2f}, F555W={zp2:.2f}")
+
+    catalog = []
+    for s, flux1, flux2 in zip(sources, f1, f2):
+        if flux1 > 0 and flux2 > 0:
+            mag1 = -2.5 * np.log10(flux1) + zp1
+            mag2 = -2.5 * np.log10(flux2) + zp2
+            catalog.append({
+                'x': s['x'],
+                'y': s['y'],
+                'ap_radius': 5,
+                'mag_F336W': mag1,
+                'mag_F555W': mag2,
+                'color': mag1 - mag2
+            })
+
+    print(f"Computed magnitudes for {len(catalog)} stars")
+    return catalog
+
+
+# ============================================================
+# TASK 4: HERTZSPRUNG–RUSSELL DIAGRAM
+# ============================================================
+
+def plot_hr(catalog):
+    """Plot the HR diagram (color–magnitude diagram)."""
+    color = [s["color"] for s in catalog]
+    mag = [s["mag_F336W"] for s in catalog]
+
+    plt.figure(figsize=(8, 10))
+    plt.scatter(color, mag, s=15, c='gold', edgecolors='black', alpha=0.7)
+    plt.gca().invert_yaxis()
+
+    plt.xlabel("Color (F336W - F555W)")
+    plt.ylabel("Magnitude (F336W)")
+    plt.title("Hertzsprung–Russell Diagram")
+
+    plt.grid(alpha=0.3, linestyle='--')
+    plt.text(0.05, 0.95, f"N = {len(catalog)}", transform=plt.gca().transAxes,
+             ha='left', va='top', fontsize=9, bbox=dict(facecolor='wheat', alpha=0.5))
+    plt.tight_layout()
+    plt.savefig("hr_diagram.png", dpi=150)
+    plt.show()
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+if __name__ == "__main__":
+    print("\n --- COSMIC RAY REMOVAL --- ")
+    f336w = combine_fits_images("data/F336W")
+    f555w = combine_fits_images("data/F555W")
+    show_combined_images(f336w, f555w)
+
+    print("\n --- STAR DETECTION & MATCHING --- ")
+    print("F336W:")
+    src336 = find_sources(f336w)
+    print("F555W:")
+    src555 = find_sources(f555w)
+    print("Matching...")
+    matched = cross_match(src336, src555)
+    show_detections(f336w, f555w, src336, src555, matched)
+    save_catalog(matched, "matched_stars.txt")
+
+    print("\n --- APERTURE PHOTOMETRY --- ")
+    f336w -= np.median(f336w)
+    f555w -= np.median(f555w)
+    catalog = measure_mags(matched, f336w, f555w)
+    save_catalog(catalog, "photometry_catalog.txt",
+                 cols=["ID", "x", "y", "ap_radius", "mag_F336W", "mag_F555W", "color"])
+
+    print("\n --- HERTZSPRUNG–RUSSELL DIAGRAM --- ")
+    plot_hr(catalog)
+
+    print("\n Complete ✅")
