@@ -48,71 +48,82 @@ def cosmic_ray_removal(directory, output_file=None):
 f336w = cosmic_ray_removal("data/F336W")
 f555w = cosmic_ray_removal("data/F555W")
 
-"""
-Visualisation TASK 1
-"""
-fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-
-axes[0].imshow(f336w, cmap='gray', origin='lower', vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
-axes[1].imshow(f555w, cmap='gray', origin='lower', vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
-axes[0].set_title("Combined F336W")
-axes[1].set_title("Combined F555W")
-
-for ax in axes:
-    ax.set_xticks([])
-    ax.set_yticks([])
-
-plt.tight_layout()
-plt.show()
+# """
+# Visualisation TASK 1
+# """
+# fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+#
+# axes[0].imshow(f336w, cmap='gray', origin='lower', vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
+# axes[1].imshow(f555w, cmap='gray', origin='lower', vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
+# axes[0].set_title("Combined F336W")
+# axes[1].set_title("Combined F555W")
+#
+# for ax in axes:
+#     ax.set_xticks([])
+#     ax.set_yticks([])
+#
+# plt.tight_layout()
+# plt.show()
 
 """
 TASK 2
-STAR FINDING
+STAR FINDING and STAR CATALOGUE
 """
 
-def star_finding(image, threshold_sigma=1.5, edge_buffer=50):
+def star_finding(image, threshold_sigma=1, edge_buffer=50):
     """
     Star detection based on brightness for now, avoiding
     detection on the edge of the image.
+
+    -Background Substraction
+    -Filter by brightness
+    -Avoid left and bottom edges
     """
     background = np.median(image)
     background_std = np.std(image)
+    background_subtracted = image - background
 
-    #Filter by brightness
-    threshold = background + (threshold_sigma * background_std)
-    source_mask = image > threshold
+    #Filter by brightness with subtracted background
+    threshold = threshold_sigma * background_std
+    source_mask = background_subtracted > threshold
 
     labeled_image, num_sources = ndimage.label(source_mask)
     print(f"Initial detections: {num_sources}")
 
-    # Extract sources
+    # Extract sources and exclude left and bottom edge
     sources = []
-    image_height, image_width = image.shape
+
     for source_id in range(1, num_sources + 1):
-        # Find all pixels belonging to this source
         source_pixels = labeled_image == source_id
         area = np.sum(source_pixels)
 
-        # Calculate the center position (centroid)
         y_coords, x_coords = np.where(source_pixels)
         x_center = np.mean(x_coords)
         y_center = np.mean(y_coords)
 
-        #This will exclude the edges as its causing false detections.
-        if (edge_buffer < x_center < image_width - edge_buffer and
-                edge_buffer < y_center < image_height - edge_buffer):
+        if (x_center > edge_buffer and
+                edge_buffer < y_center):
             sources.append({
-                'id': len(sources) + 1,  # Renumber from 1
+                'id': len(sources) + 1,
                 'x': x_center,
                 'y': y_center,
                 'area': area
             })
 
-    print(f"Sources after size filtering: {len(sources)}")
+    print(f"Sources after edge filtering: {len(sources)}")
     return sources
 
 
-# # Test on both filters
+def cross_match_sources(s1,s2, match_radius):
+    """
+    Cross-match sources between F336W and F555W
+
+    """
+    pass
+    return
+
+
+# Test on both filters
 # print("=" * 50)
 # print("DETECTING SOURCES IN F336W")
 # print("=" * 50)
@@ -123,16 +134,16 @@ def star_finding(image, threshold_sigma=1.5, edge_buffer=50):
 # print("=" * 50)
 # sources_f555w = star_finding(f555w)
 
-# """
-# VISUALIZATION
-# """
+"""
+VISUALIZATION
+"""
 # fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 #
 # # F336W with detections
 # axes[0].imshow(f336w, cmap='gray', origin='lower',
 #                vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
 # for source in sources_f336w:
-#     axes[0].plot(source['x'], source['y'], 'r+', markersize=10, markeredgewidth=1)
+#     axes[0].plot(source['x'], source['y'], 'r+', markersize=5, markeredgewidth=0.5)
 # axes[0].set_title(f"F336W - {len(sources_f336w)} sources detected")
 # axes[0].set_xlabel("X pixel")
 # axes[0].set_ylabel("Y pixel")
@@ -141,7 +152,7 @@ def star_finding(image, threshold_sigma=1.5, edge_buffer=50):
 # axes[1].imshow(f555w, cmap='gray', origin='lower',
 #                vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
 # for source in sources_f555w:
-#     axes[1].plot(source['x'], source['y'], 'r+', markersize=10, markeredgewidth=1)
+#     axes[1].plot(source['x'], source['y'], 'r+', markersize=5, markeredgewidth=0.5)
 # axes[1].set_title(f"F555W - {len(sources_f555w)} sources detected")
 # axes[1].set_xlabel("X pixel")
 # axes[1].set_ylabel("Y pixel")
