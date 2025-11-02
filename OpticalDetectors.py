@@ -71,7 +71,7 @@ TASK 2
 STAR FINDING and STAR CATALOGUE
 """
 
-def star_finding(image, threshold_sigma=1, edge_buffer=50):
+def star_finding(image, threshold_sigma=0.5, edge_buffer=50):
     """
     Star detection based on brightness for now, avoiding
     detection on the edge of the image.
@@ -114,19 +114,13 @@ def star_finding(image, threshold_sigma=1, edge_buffer=50):
     print(f"Sources after edge filtering: {len(sources)}")
     return sources
 
-
-# Test on both filters
-print("=" * 50)
 print("DETECTING SOURCES IN F336W")
-print("=" * 50)
 sources_f336w = star_finding(f336w)
 
-print("\n" + "=" * 50)
 print("DETECTING SOURCES IN F555W")
-print("=" * 50)
 sources_f555w = star_finding(f555w)
 
-def cross_match_sources(src1,src2, match_radius=3):
+def cross_match_sources(src1,src2, match_radius=2.5):
     """
     Cross-match sources between F336W and F555W.
 
@@ -156,10 +150,7 @@ def cross_match_sources(src1,src2, match_radius=3):
                 'distance': min_distance
             })
 
-    print(f"\nCross-matching results (radius={match_radius} pixels):")
     print(f"  Matched sources: {len(matched_stars)}")
-
-
     return matched_stars
 
 # Matched stars from F336W and F555W
@@ -192,18 +183,205 @@ def star_catalog(matched_sources, output_file='star_catalog.txt'):
         f.write("Object ID\tx-center\ty-center\n")
 
         # Write each source
-        for source in catalog:
-            f.write(f"{source['Object ID']}\t{source['x-center']:.2f}\t{source['y-center']:.2f}\n")
+        for s in catalog:
+            f.write(f"{s['Object ID']}\t{s['x-center']:.2f}\t{s['y-center']:.2f}\n")
 
     return catalog
 
 # Create the final catalog
 final_catalog = star_catalog(matched)
 
+"""
+TASK 3
+PHOTOMETRY CATALOG
+"""
 
-"""
-VISUALIZATION
-"""
+
+def aperture_photometry(image, x, y, aperture_radius=5, inner_annulus=8, outer_annulus=12):
+    """
+    Perform circular aperture photometry on a source.
+
+    Parameters:
+    - image: 2D array of the image
+    - x, y: center coordinates of the source
+    - aperture_radius: radius of circular aperture for source flux
+    - inner_annulus: inner radius for background annulus
+    - outer_annulus: outer radius for background annulus
+
+    Returns:
+    - flux: background-subtracted flux
+    - background: estimated local background per pixel
+    """
+    height, width = image.shape
+
+    # Create coordinate grids
+    y_grid, x_grid = np.ogrid[:height, :width]
+
+    # Calculate distance from source center
+    distance = np.sqrt((x_grid - x) ** 2 + (y_grid - y) ** 2)
+
+    # Define aperture and annulus masks
+    aperture_mask = distance <= aperture_radius
+    annulus_mask = (distance >= inner_annulus) & (distance <= outer_annulus)
+
+    # Measure background in annulus
+    if np.sum(annulus_mask) > 0:
+        background_pixels = image[annulus_mask]
+        background_per_pixel = np.median(background_pixels)
+    else:
+        background_per_pixel = 0
+
+    # Measure flux in aperture
+    aperture_pixels = image[aperture_mask]
+    total_flux = np.sum(aperture_pixels)
+
+    # Subtract background contribution
+    n_aperture_pixels = np.sum(aperture_mask)
+    background_contribution = background_per_pixel * n_aperture_pixels
+    flux = total_flux - background_contribution
+
+    return flux, background_per_pixel
+
+
+def flux_to_magnitude(flux, zero_point):
+    """
+    Convert flux to magnitude with zero-point calibration.
+    Handles negative/zero flux by returning NaN.
+
+    Parameters:
+    - flux: measured flux
+    - zero_point: calibration constant (typically 25-26 for HST)
+    """
+    if flux <= 0:
+        return np.nan
+    return -2.5 * np.log10(flux) + zero_point
+
+
+def perform_photometry_catalog(catalog, image_f336w, image_f555w, aperture_radius=5, reference_mag=15.0):
+    """
+    Perform photometry on all sources in catalog for both filters.
+
+    Parameters:
+    - catalog: list of sources with x-center, y-center
+    - image_f336w: F336W image array
+    - image_f555w: F555W image array
+    - aperture_radius: radius for aperture photometry
+    - reference_mag: magnitude to assign to the brightest star (default 15.0)
+
+    Returns:
+    - photometry_catalog: catalog with magnitudes added
+    """
+    photometry_catalog = []
+    fluxes_f336w = []
+    fluxes_f555w = []
+
+    # First pass: measure all fluxes
+    for source in catalog:
+        x = source['x-center']
+        y = source['y-center']
+
+        # Perform photometry in both filters
+        flux_f336w, bg_f336w = aperture_photometry(image_f336w, x, y, aperture_radius)
+        flux_f555w, bg_f555w = aperture_photometry(image_f555w, x, y, aperture_radius)
+
+        fluxes_f336w.append(flux_f336w)
+        fluxes_f555w.append(flux_f555w)
+
+    # Find the brightest star (maximum flux) in each filter
+    max_flux_f336w = max(fluxes_f336w)
+    max_flux_f555w = max(fluxes_f555w)
+
+    # Calculate zero-points based on brightest star
+    zero_point_f336w = reference_mag + 2.5 * np.log10(max_flux_f336w)
+    zero_point_f555w = reference_mag + 2.5 * np.log10(max_flux_f555w)
+
+    print(f"Brightest star flux F336W: {max_flux_f336w:.2f} → zero-point: {zero_point_f336w:.2f}")
+    print(f"Brightest star flux F555W: {max_flux_f555w:.2f} → zero-point: {zero_point_f555w:.2f}")
+
+    # Second pass: convert all fluxes to magnitudes
+    for i, source in enumerate(catalog):
+        mag_f336w = flux_to_magnitude(fluxes_f336w[i], zero_point_f336w)
+        mag_f555w = flux_to_magnitude(fluxes_f555w[i], zero_point_f555w)
+
+        photometry_catalog.append({
+            'Object ID': source['Object ID'],
+            'x-center': source['x-center'],
+            'y-center': source['y-center'],
+            'aperture_radius': aperture_radius,
+            'mag_F336W': mag_f336w,
+            'mag_F555W': mag_f555w
+        })
+
+    return photometry_catalog
+
+
+# Perform photometry on final catalog
+print(f"\n{'=' * 50}")
+print("PERFORMING APERTURE PHOTOMETRY")
+print(f"{'=' * 50}")
+
+# Use background-subtracted images for photometry
+f336w_bgsub = f336w - np.median(f336w)
+f555w_bgsub = f555w - np.median(f555w)
+
+photometry_catalog = perform_photometry_catalog(final_catalog, f336w_bgsub, f555w_bgsub)
+
+# """
+# debug
+# """
+# Debug: Check a few flux values
+# print("\nDEBUG - First 5 sources:")
+# for i, source in enumerate(photometry_catalog[:5]):
+#     x, y = source['x-center'], source['y-center']
+#     flux_f336w, bg = aperture_photometry(f336w_bgsub, x, y, aperture_radius=5)
+#     print(f"Source {i+1}: flux_F336W = {flux_f336w:.2f}, mag = {source['mag_F336W']:.3f}")
+
+# Save photometry catalog
+with open('photometry_catalog.txt', 'w') as f:
+    f.write("Object_ID\tx-center\ty-center\taperture_radius\tmag_F336W\tmag_F555W\n")
+    for source in photometry_catalog:
+        f.write(f"{source['Object ID']}\t{source['x-center']:.2f}\t{source['y-center']:.2f}\t"
+                f"{source['aperture_radius']:.1f}\t{source['mag_F336W']:.3f}\t{source['mag_F555W']:.3f}\n")
+
+print(f"Photometry catalog saved: photometry_catalog.txt")
+print(f"Total sources with photometry: {len(photometry_catalog)}")
+
+
+# """
+# Visualization of matched stars between filters.
+# """
+#
+# fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+#
+# # F336W with final catalog sources
+# axes[0].imshow(f336w, cmap='gray', origin='lower',
+#                vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
+# for source in final_catalog:
+#     axes[0].plot(source['x-center'], source['y-center'], 'r+', markersize=4, markeredgewidth=0.8)
+# axes[0].set_title(f"F336W - Final Catalog: {len(final_catalog)} matched sources")
+# axes[0].set_xlabel("X pixel")
+# axes[0].set_ylabel("Y pixel")
+#
+# # F555W with final catalog sources
+# axes[1].imshow(f555w, cmap='gray', origin='lower',
+#                vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
+# for source in final_catalog:
+#     axes[1].plot(source['x-center'], source['y-center'], 'r+', markersize=4, markeredgewidth=0.8)
+# axes[1].set_title(f"F555W - Final Catalog: {len(final_catalog)} matched sources")
+# axes[1].set_xlabel("X pixel")
+# axes[1].set_ylabel("Y pixel")
+#
+# plt.tight_layout()
+# plt.show()
+
+
+
+
+
+
+# """
+# VISUALIZATION
+# """
 # fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 #
 # # F336W with detections
