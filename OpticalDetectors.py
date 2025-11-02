@@ -72,47 +72,33 @@ TASK 2
 STAR FINDING and STAR CATALOGUE
 """
 
-def star_finding(image, threshold_sigma=0.5, edge_buffer=50):
-    """
-    Star detection based on brightness for now, avoiding
-    detection on the edge of the image.
 
-    -Background Substraction
-    -Filter by brightness
-    -Avoid left and bottom edges
-    """
+def star_finding(image, threshold_sigma=0.8, edge_buffer=50):
+    """Detect sources above threshold, excluding edges."""
     background = np.median(image)
     background_std = np.std(image)
     background_subtracted = image - background
 
-    #Filter by brightness with subtracted background
     threshold = threshold_sigma * background_std
     source_mask = background_subtracted > threshold
 
-    labeled_image, num_sources = ndimage.label(source_mask)
-    print(f"Initial detections: {num_sources}")
+    labeled, num = ndimage.label(source_mask)
+    print(f"  Initial detections: {num}")
 
-    # Extract sources and exclude left and bottom edge
     sources = []
+    for i in range(1, num + 1):
+        pixels = labeled == i
+        y_coords, x_coords = np.where(pixels)
 
-    for source_id in range(1, num_sources + 1):
-        source_pixels = labeled_image == source_id
-        area = np.sum(source_pixels)
+        # Weighted centroid (brighter pixels pull center)
+        brightness = background_subtracted[pixels]
+        x_center = np.sum(x_coords * brightness) / np.sum(brightness)
+        y_center = np.sum(y_coords * brightness) / np.sum(brightness)
 
-        y_coords, x_coords = np.where(source_pixels)
-        x_center = np.mean(x_coords)
-        y_center = np.mean(y_coords)
+        if x_center > edge_buffer and y_center > edge_buffer:
+            sources.append({'x': x_center, 'y': y_center})
 
-        if (x_center > edge_buffer and
-                edge_buffer < y_center):
-            sources.append({
-                'id': len(sources) + 1,
-                'x': x_center,
-                'y': y_center,
-                'area': area
-            })
-
-    print(f"Sources after edge filtering: {len(sources)}")
+    print(f"  After edge filtering: {len(sources)}")
     return sources
 
 print("DETECTING SOURCES IN F336W")
@@ -476,11 +462,3 @@ plt.show()
 
 print(f"\n{'='*50}")
 print("HR DIAGRAM CREATED")
-
-
-
-
-
-
-
-
