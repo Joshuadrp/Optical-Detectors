@@ -12,7 +12,8 @@ COSMIC RAY REMOVAL
 
 def cosmic_ray_removal(directory, output_file=None):
     """
-    This function combines our fits images into a single image.
+    This function combines our fits images into a single image,
+    which as seen in class can remove most of the cosmic rays.
     We will have two images, one for each filter.
     """
 
@@ -114,25 +115,91 @@ def star_finding(image, threshold_sigma=1, edge_buffer=50):
     return sources
 
 
-def cross_match_sources(s1,s2, match_radius):
-    """
-    Cross-match sources between F336W and F555W
-
-    """
-    pass
-    return
-
-
 # Test on both filters
-# print("=" * 50)
-# print("DETECTING SOURCES IN F336W")
-# print("=" * 50)
-# sources_f336w = star_finding(f336w)
-#
-# print("\n" + "=" * 50)
-# print("DETECTING SOURCES IN F555W")
-# print("=" * 50)
-# sources_f555w = star_finding(f555w)
+print("=" * 50)
+print("DETECTING SOURCES IN F336W")
+print("=" * 50)
+sources_f336w = star_finding(f336w)
+
+print("\n" + "=" * 50)
+print("DETECTING SOURCES IN F555W")
+print("=" * 50)
+sources_f555w = star_finding(f555w)
+
+def cross_match_sources(src1,src2, match_radius=3):
+    """
+    Cross-match sources between F336W and F555W.
+
+    -src1: list of sources from fist filter
+    -src2: list of sources from second filter
+    -match_radius: radius of cross-match
+    """
+    matched_stars = []
+    for s1 in src1:
+        # Find the closest source in filter 2
+        min_distance = float('inf')
+        closest_match = None
+
+        for s2 in src2:
+            # Calculate distance between sources
+            distance = np.sqrt((s1['x'] - s2['x']) ** 2 + (s1['y'] - s2['y']) ** 2)
+
+            if distance < min_distance:
+                min_distance = distance
+                closest_match = s2
+
+        # If closest match is within radius, is a match.
+        if closest_match is not None and min_distance <= match_radius:
+            matched_stars.append({
+                'filter1': s1,
+                'filter2': closest_match,
+                'distance': min_distance
+            })
+
+    print(f"\nCross-matching results (radius={match_radius} pixels):")
+    print(f"  Matched sources: {len(matched_stars)}")
+
+
+    return matched_stars
+
+# Matched stars from F336W and F555W
+matched = cross_match_sources(sources_f336w, sources_f555w, match_radius=3.0)
+
+
+def star_catalog(matched_sources, output_file='star_catalog.txt'):
+    """
+    Create a final catalog from matched sources.
+
+    Parameters:
+    - matched_sources: list of matched stars
+    - output_file: filename to save catalog
+    """
+    catalog = []
+
+    for i, match in enumerate(matched_sources):
+        # Average the coordinates from both filters
+        x_avg = (match['filter1']['x'] + match['filter2']['x']) / 2.0
+        y_avg = (match['filter1']['y'] + match['filter2']['y']) / 2.0
+
+        catalog.append({
+            'Object ID': i + 1,
+            'x-center': x_avg,
+            'y-center': y_avg
+        })
+
+    # Save to file
+    with open(output_file, 'w') as f:
+        f.write("Object ID\tx-center\ty-center\n")
+
+        # Write each source
+        for source in catalog:
+            f.write(f"{source['Object ID']}\t{source['x-center']:.2f}\t{source['y-center']:.2f}\n")
+
+    return catalog
+
+# Create the final catalog
+final_catalog = star_catalog(matched)
+
 
 """
 VISUALIZATION
