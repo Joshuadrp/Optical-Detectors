@@ -7,6 +7,20 @@ one via visible light, we know this due to its wavelengths 336nm and 555nm. The 
 given by the assignment briefing. Each of them is explained through the README, as well as their 
 individual objectives, methods and results. The code is modular, utilizing functions efficiently and clearly. 
 
+## Requirements
+```bash
+python >= 3.8
+numpy
+scipy
+astropy
+matplotlib
+```
+
+Install with:
+```bash
+pip install numpy scipy astropy matplotlib
+```
+
 ## Project Structure
 
 ```
@@ -93,10 +107,11 @@ to reveal the main sequence and other stellar populations.
 ## Results
 
 **Typical Performance:**
-- ~1400-1600 matched sources detected
+- ~2000 matched stars detected(before photometry)
+- ~1967 stars detected for HR Diagram after flux filtering
 - Clear main sequence visible in HR diagram
-- Color range: -6 to +8 mag (hot blue to cool red stars)
-- Magnitude range: 14 to 30 (bright to faint)
+- Color range: -4 to +8 mag (hot blue to cool red stars)
+- Magnitude range: 16 to 28 (bright to faint)
 
 ## Key Features
 
