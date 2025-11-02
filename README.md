@@ -36,7 +36,7 @@ Optical-Detectors/
 
 Run the complete pipeline:
 ```bash
-python your-code.py
+python OpticalDetectors.py
 ```
 The script executes all four tasks sequentially and generates output files and visualizations.
 It executes automatically, but once a plot is visualized, it needs to be closed for code to continue. 
@@ -158,7 +158,7 @@ to reveal the main sequence and other stellar populations.
 4. Matplotlib visualization: https://matplotlib.org/stable/gallery/index.html
 
 ## Author
-**Joshua Rodriguez** for:
+**Joshua Rodriguez**
 Space Detector Laboratory - Optical Detectors Assignment
 
-*Data provided by Professor Andrew Kirwan *
+*Data provided by Professor Andrew Kirwan*
