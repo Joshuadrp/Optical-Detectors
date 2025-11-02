@@ -28,7 +28,7 @@ def combine_fits_images(directory, output_file=None):
         output_file = f"combined_{folder_name}.fits"
 
     fits.writeto(output_file, combined, overwrite=True)
-    print(f"Combined image saved: {output_file}")
+    print("OK")
     return combined
 
 
@@ -69,7 +69,6 @@ def find_sources(image, sigma=1, min_area=3, max_area=200, edge=50):
     #Create mask for bright pixels
     mask = (image - bkg) > thresh
     labeled, n = ndimage.label(mask)
-    print(f"  Found {n} raw detections")
 
     sources = []
     for i in range(1, n + 1):
@@ -85,7 +84,6 @@ def find_sources(image, sigma=1, min_area=3, max_area=200, edge=50):
         if xc > edge and yc > edge:
             sources.append({'x': xc, 'y': yc, 'area': area})
 
-    print(f"  {len(sources)} detections kept after filtering")
     return sources
 
 
@@ -173,7 +171,7 @@ def measure_mags(sources, img1, img2, ref_mag=15.0):
     f1 = [aperture_flux(img1, s['x'], s['y']) for s in sources]
     f2 = [aperture_flux(img2, s['x'], s['y']) for s in sources]
 
-    # Calibrate using brightest star
+    # Calibrate using brightest star from filters
     zp1 = ref_mag + 2.5 * np.log10(max(f1))
     zp2 = ref_mag + 2.5 * np.log10(max(f2))
     print(f"Zero-points: F336W={zp1:.2f}, F555W={zp2:.2f}")
@@ -192,7 +190,6 @@ def measure_mags(sources, img1, img2, ref_mag=15.0):
                 'color': mag1 - mag2
             })
 
-    print(f"Computed magnitudes for {len(catalog)} stars")
     return catalog
 
 
@@ -232,9 +229,7 @@ if __name__ == "__main__":
     show_combined_images(f336w, f555w)
 
     print("\n --- STAR DETECTION & MATCHING --- ")
-    print("F336W:")
     src336 = find_sources(f336w)
-    print("F555W:")
     src555 = find_sources(f555w)
     print("Matching...")
     matched = cross_match(src336, src555)
