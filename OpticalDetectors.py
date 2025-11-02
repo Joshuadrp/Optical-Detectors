@@ -15,6 +15,8 @@ def cosmic_ray_removal(directory, output_file=None):
     This function combines our fits images into a single image,
     which as seen in class can remove most of the cosmic rays.
     We will have two images, one for each filter.
+    As a reference for future me, F336 is UV range (UV 10-400nm)
+    F555 is visible light (Visible light 400-700nm)
     """
 
     fits_files = [
@@ -316,14 +318,11 @@ def perform_photometry_catalog(catalog, image_f336w, image_f555w, aperture_radiu
 
 
 # Perform photometry on final catalog
-print(f"\n{'=' * 50}")
 print("PERFORMING APERTURE PHOTOMETRY")
-print(f"{'=' * 50}")
 
 # Use background-subtracted images for photometry
 f336w_bgsub = f336w - np.median(f336w)
 f555w_bgsub = f555w - np.median(f555w)
-
 photometry_catalog = perform_photometry_catalog(final_catalog, f336w_bgsub, f555w_bgsub)
 
 # """
@@ -345,6 +344,60 @@ with open('photometry_catalog.txt', 'w') as f:
 
 print(f"Photometry catalog saved: photometry_catalog.txt")
 print(f"Total sources with photometry: {len(photometry_catalog)}")
+
+"""
+TASK 4
+Hertzsprung-Russell Diagram
+"""
+
+def calculate_colors(photometry_catalog):
+    """
+    Calculate color (F336W - F555W) for each source.
+    Filter out sources with NaN magnitudes.
+    Parameters:
+    - photometry_catalog: catalog with magnitudes
+
+    Returns:
+    - hr_catalog: catalog with color added, NaN values removed
+    """
+    hr_catalog = []
+
+    for source in photometry_catalog:
+        mag_f336w = source['mag_F336W']
+        mag_f555w = source['mag_F555W']
+
+        # Skip sources with invalid magnitudes
+        if np.isnan(mag_f336w) or np.isnan(mag_f555w):
+            continue
+
+        # Calculate color (difference between filters)
+        color = mag_f336w - mag_f555w
+
+        hr_catalog.append({
+            'Object ID': source['Object ID'],
+            'x-center': source['x-center'],
+            'y-center': source['y-center'],
+            'aperture_radius': source['aperture_radius'],
+            'mag_F336W': mag_f336w,
+            'mag_F555W': mag_f555w,
+            'color_F336W_F555W': color
+        })
+
+    return hr_catalog
+
+print("CALCULATING COLORS")
+hr_catalog = calculate_colors(photometry_catalog)
+print(f"Sources with valid magnitudes: {len(hr_catalog)} (removed {len(photometry_catalog) - len(hr_catalog)} with NaN)")
+
+with open('hr_catalog.txt', 'w') as f:
+    f.write("Object_ID\tx-center\ty-center\taperture_radius\tmag_F336W\tmag_F555W\tcolor\n")
+    for source in hr_catalog:
+        f.write(f"{source['Object ID']}\t{source['x-center']:.2f}\t{source['y-center']:.2f}\t"
+                f"{source['aperture_radius']:.1f}\t{source['mag_F336W']:.3f}\t{source['mag_F555W']:.3f}\t"
+                f"{source['color_F336W_F555W']:.3f}\n")
+
+
+
 
 
 # """
@@ -373,10 +426,6 @@ print(f"Total sources with photometry: {len(photometry_catalog)}")
 #
 # plt.tight_layout()
 # plt.show()
-
-
-
-
 
 
 # """
