@@ -177,7 +177,7 @@ def measure_mags(sources, img1, img2, ref_mag=15.0):
 
     catalog = []
     for s, flux1, flux2 in zip(sources, f1, f2):
-        if flux1 > 0 and flux2 > 0:
+        if flux1 > 0 and flux2 > 0:   #Skip star is flux is <=0.
             mag1 = -2.5 * np.log10(flux1) + zp1
             mag2 = -2.5 * np.log10(flux2) + zp2
             catalog.append({
@@ -188,6 +188,8 @@ def measure_mags(sources, img1, img2, ref_mag=15.0):
                 'mag_F555W': mag2,
                 'color': mag1 - mag2
             })
+
+    print(f"We got {len(catalog)} stars for our HR diagram.")
 
     return catalog
 
@@ -241,7 +243,6 @@ if __name__ == "__main__":
     catalog = measure_mags(matched, f336w, f555w)
     save_catalog(catalog, "photometry_catalog.txt",
                  cols=["ID", "x", "y", "ap_radius", "mag_F336W", "mag_F555W", "color"])
-    print("OK")
 
     print("\n --- HERTZSPRUNG–RUSSELL DIAGRAM --- ")
     plot_hr(catalog)

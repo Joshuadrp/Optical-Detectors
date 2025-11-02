@@ -1,16 +1,20 @@
 # Optical Detectors: Stellar Photometry Assignment
 
 ## Overview
-
+This project implements a stellar photometry pipeline to process FITS images that were taken 
+with two optical filters F336W and F555W, the first one providing images via UV light and the second
+one via visible light, we know this due to its wavelengths 336nm and 555nm. The workflow is divided in four tasks,
+given by the assignment briefing. Each of them is explained through the README, as well as their 
+individual objectives, methods and results. The code is modular, utilizing functions efficiently and clearly. 
 
 ## Project Structure
 
 ```
-your-github-repo/
+Optical-Detectors/
 ├── data/
 │   ├── F336W/          # UV filter FITS files (336 nm)
 │   └── F555W/          # Visible filter FITS files (555 nm)
-├── your-code.py
+├── OpticalDetectors.py
 └── README.md
 ```
 
@@ -139,8 +143,7 @@ to reveal the main sequence and other stellar populations.
 4. Matplotlib visualization: https://matplotlib.org/stable/gallery/index.html
 
 ## Author
-Joshua Rodriguez for:
-
+**Joshua Rodriguez** for:
 Space Detector Laboratory - Optical Detectors Assignment
 
 *Data provided by Professor Andrew Kirwan *
