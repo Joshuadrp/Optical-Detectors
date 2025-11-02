@@ -1,4 +1,4 @@
-# Optical Detectors: Stellar Photometry Assignment
+# SPACE DETECTOR LABORATORY: OPTICAL DETECTORS ASSIGNMENT
 
 ## Overview
 This project implements a stellar photometry pipeline to process FITS images that were taken 
@@ -59,7 +59,7 @@ Combines multiple FITS exposures using median stacking to remove cosmic ray hits
 
 ### Task 2: Star Detection, Cross-Matching & Star Catalog Created
 
-Detects stellar sources, hopefully starts, in both filters using brightness 
+Detects stellar sources, hopefully stars, in both filters using brightness 
 thresholding with sigma-clipped background estimation, then cross-matches sources between filters by position, after this
 a catalog containing stars within the two images is created as a text file.
 
