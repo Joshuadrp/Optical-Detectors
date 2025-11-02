@@ -1,6 +1,5 @@
 import os
 from astropy.io import fits
-from astropy.visualization import simple_norm
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import ndimage
@@ -51,22 +50,22 @@ def cosmic_ray_removal(directory, output_file=None):
 f336w = cosmic_ray_removal("data/F336W")
 f555w = cosmic_ray_removal("data/F555W")
 
-# """
-# Visualisation TASK 1
-# """
-# fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-#
-# axes[0].imshow(f336w, cmap='gray', origin='lower', vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
-# axes[1].imshow(f555w, cmap='gray', origin='lower', vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
-# axes[0].set_title("Combined F336W")
-# axes[1].set_title("Combined F555W")
-#
-# for ax in axes:
-#     ax.set_xticks([])
-#     ax.set_yticks([])
-#
-# plt.tight_layout()
-# plt.show()
+"""
+Visualisation TASK 1
+"""
+fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+
+axes[0].imshow(f336w, cmap='gray', origin='lower', vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
+axes[1].imshow(f555w, cmap='gray', origin='lower', vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
+axes[0].set_title("Combined F336W")
+axes[1].set_title("Combined F555W")
+
+for ax in axes:
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+plt.tight_layout()
+plt.show()
 
 """
 TASK 2
@@ -122,6 +121,32 @@ sources_f336w = star_finding(f336w)
 print("DETECTING SOURCES IN F555W")
 sources_f555w = star_finding(f555w)
 
+"""
+Visualizing stars found in both images
+"""
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+# F336W with detections
+axes[0].imshow(f336w, cmap='gray', origin='lower',
+               vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
+for source in sources_f336w:
+    axes[0].plot(source['x'], source['y'], 'r+', markersize=5, markeredgewidth=0.5)
+axes[0].set_title(f"F336W - {len(sources_f336w)} sources detected")
+axes[0].set_xlabel("X pixel")
+axes[0].set_ylabel("Y pixel")
+
+# F555W with detections
+axes[1].imshow(f555w, cmap='gray', origin='lower',
+               vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
+for source in sources_f555w:
+    axes[1].plot(source['x'], source['y'], 'r+', markersize=5, markeredgewidth=0.5)
+axes[1].set_title(f"F555W - {len(sources_f555w)} sources detected")
+axes[1].set_xlabel("X pixel")
+axes[1].set_ylabel("Y pixel")
+
+plt.tight_layout()
+plt.show()
+
 def cross_match_sources(src1,src2, match_radius=2.5):
     """
     Cross-match sources between F336W and F555W.
@@ -158,7 +183,6 @@ def cross_match_sources(src1,src2, match_radius=2.5):
 # Matched stars from F336W and F555W
 matched = cross_match_sources(sources_f336w, sources_f555w, match_radius=3.0)
 
-
 def star_catalog(matched_sources, output_file='star_catalog.txt'):
     """
     Create a final catalog from matched sources.
@@ -192,6 +216,33 @@ def star_catalog(matched_sources, output_file='star_catalog.txt'):
 
 # Create the final catalog
 final_catalog = star_catalog(matched)
+
+"""
+Visualization of matched stars between filters.
+"""
+
+fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+
+# F336W with final catalog sources
+axes[0].imshow(f336w, cmap='gray', origin='lower',
+               vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
+for source in final_catalog:
+    axes[0].plot(source['x-center'], source['y-center'], 'r+', markersize=4, markeredgewidth=0.8)
+axes[0].set_title(f"F336W - Final Catalog: {len(final_catalog)} matched sources")
+axes[0].set_xlabel("X pixel")
+axes[0].set_ylabel("Y pixel")
+
+# F555W with final catalog sources
+axes[1].imshow(f555w, cmap='gray', origin='lower',
+               vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
+for source in final_catalog:
+    axes[1].plot(source['x-center'], source['y-center'], 'r+', markersize=4, markeredgewidth=0.8)
+axes[1].set_title(f"F555W - Final Catalog: {len(final_catalog)} matched sources")
+axes[1].set_xlabel("X pixel")
+axes[1].set_ylabel("Y pixel")
+
+plt.tight_layout()
+plt.show()
 
 """
 TASK 3
@@ -325,16 +376,6 @@ f336w_bgsub = f336w - np.median(f336w)
 f555w_bgsub = f555w - np.median(f555w)
 photometry_catalog = perform_photometry_catalog(final_catalog, f336w_bgsub, f555w_bgsub)
 
-# """
-# debug
-# """
-# Debug: Check a few flux values
-# print("\nDEBUG - First 5 sources:")
-# for i, source in enumerate(photometry_catalog[:5]):
-#     x, y = source['x-center'], source['y-center']
-#     flux_f336w, bg = aperture_photometry(f336w_bgsub, x, y, aperture_radius=5)
-#     print(f"Source {i+1}: flux_F336W = {flux_f336w:.2f}, mag = {source['mag_F336W']:.3f}")
-
 # Save photometry catalog
 with open('photometry_catalog.txt', 'w') as f:
     f.write("Object_ID\tx-center\ty-center\taperture_radius\tmag_F336W\tmag_F555W\n")
@@ -397,61 +438,49 @@ with open('hr_catalog.txt', 'w') as f:
                 f"{source['color_F336W_F555W']:.3f}\n")
 
 
+# Extract colors and magnitudes
+colors = [source['color_F336W_F555W'] for source in hr_catalog]
+magnitudes = [source['mag_F336W'] for source in hr_catalog]
+
+# Create HR Diagram
+fig, ax = plt.subplots(figsize=(10, 8))
+
+# Scatter plot
+ax.scatter(colors, magnitudes, alpha=0.6, s=20, c='yellow', edgecolors='black', linewidth=0.5)
+
+# CRITICAL: Invert y-axis (brighter stars at top)
+ax.invert_yaxis()
+
+# Labels and title
+ax.set_xlabel('Color (F336W - F555W) [mag]', fontsize=12)
+ax.set_ylabel('Magnitude F336W [mag]', fontsize=12)
+ax.set_title('Hertzsprung-Russell Diagram', fontsize=14, fontweight='bold')
+
+# Add grid for readability
+ax.grid(True, alpha=0.3, linestyle='--')
+
+# Add text annotations
+ax.text(0.05, 0.95, f'N = {len(hr_catalog)} stars',
+        transform=ax.transAxes, fontsize=10, verticalalignment='top',
+        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+# Add arrow annotations for hot/cool
+ax.text(0.05, 0.05, 'Hot (Blue)', transform=ax.transAxes, fontsize=9,
+        color='blue', style='italic')
+ax.text(0.95, 0.05, 'Cool (Red)', transform=ax.transAxes, fontsize=9,
+        color='red', style='italic', ha='right')
+
+plt.tight_layout()
+plt.savefig('hr_diagram.png', dpi=150)
+plt.show()
+
+print(f"\n{'='*50}")
+print("HR DIAGRAM CREATED")
 
 
 
-# """
-# Visualization of matched stars between filters.
-# """
-#
-# fig, axes = plt.subplots(1, 2, figsize=(16, 7))
-#
-# # F336W with final catalog sources
-# axes[0].imshow(f336w, cmap='gray', origin='lower',
-#                vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
-# for source in final_catalog:
-#     axes[0].plot(source['x-center'], source['y-center'], 'r+', markersize=4, markeredgewidth=0.8)
-# axes[0].set_title(f"F336W - Final Catalog: {len(final_catalog)} matched sources")
-# axes[0].set_xlabel("X pixel")
-# axes[0].set_ylabel("Y pixel")
-#
-# # F555W with final catalog sources
-# axes[1].imshow(f555w, cmap='gray', origin='lower',
-#                vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
-# for source in final_catalog:
-#     axes[1].plot(source['x-center'], source['y-center'], 'r+', markersize=4, markeredgewidth=0.8)
-# axes[1].set_title(f"F555W - Final Catalog: {len(final_catalog)} matched sources")
-# axes[1].set_xlabel("X pixel")
-# axes[1].set_ylabel("Y pixel")
-#
-# plt.tight_layout()
-# plt.show()
 
 
-# """
-# VISUALIZATION
-# """
-# fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-#
-# # F336W with detections
-# axes[0].imshow(f336w, cmap='gray', origin='lower',
-#                vmin=np.percentile(f336w, 1), vmax=np.percentile(f336w, 99))
-# for source in sources_f336w:
-#     axes[0].plot(source['x'], source['y'], 'r+', markersize=5, markeredgewidth=0.5)
-# axes[0].set_title(f"F336W - {len(sources_f336w)} sources detected")
-# axes[0].set_xlabel("X pixel")
-# axes[0].set_ylabel("Y pixel")
-#
-# # F555W with detections
-# axes[1].imshow(f555w, cmap='gray', origin='lower',
-#                vmin=np.percentile(f555w, 1), vmax=np.percentile(f555w, 99))
-# for source in sources_f555w:
-#     axes[1].plot(source['x'], source['y'], 'r+', markersize=5, markeredgewidth=0.5)
-# axes[1].set_title(f"F555W - {len(sources_f555w)} sources detected")
-# axes[1].set_xlabel("X pixel")
-# axes[1].set_ylabel("Y pixel")
-#
-# plt.tight_layout()
-# plt.show()
+
 
 
